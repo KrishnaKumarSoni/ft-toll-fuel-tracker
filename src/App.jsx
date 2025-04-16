@@ -200,8 +200,9 @@ function App() {
 
     setIsLoading(true);
     try {
-      const response = await axios.get('https://api.leptonmaps.com/v1/toll', {
+      const response = await axios.get('/api/proxy', {
         params: {
+          endpoint: 'toll',
           origin: tollOrigin,
           destination: tollDestination,
           waypoints: tollWaypoints || undefined,
@@ -210,9 +211,6 @@ function App() {
           include_route_metadata: true,
           include_booths: true,
           include_booths_locations: true
-        },
-        headers: {
-          'x-api-key': '9c28d2905ccce4a47416a00db2a28d2930dc44564e48f5823b54c0809b8ce7b7'
         }
       });
       
@@ -301,14 +299,12 @@ function App() {
       setDestCoord(null);
 
       // First get the fuel prices
-      const response = await axios.get('https://api.leptonmaps.com/v1/fuel/prices', {
+      const response = await axios.get('/api/proxy', {
         params: {
+          endpoint: 'fuel/prices',
           query: fuelLocation,
           date: new Date().toISOString().split('T')[0],
           fuel_type: fuelType
-        },
-        headers: {
-          'x-api-key': '9c28d2905ccce4a47416a00db2a28d2930dc44564e48f5823b54c0809b8ce7b7'
         }
       });
 
@@ -330,12 +326,10 @@ function App() {
 
       // Use geocoding to get coordinates for the location
       try {
-        const geocodeResponse = await axios.get('https://api.leptonmaps.com/v1/geocode', {
+        const geocodeResponse = await axios.get('/api/proxy', {
           params: {
+            endpoint: 'geocode',
             query: fuelLocation
-          },
-          headers: {
-            'x-api-key': '9c28d2905ccce4a47416a00db2a28d2930dc44564e48f5823b54c0809b8ce7b7'
           }
         });
 
