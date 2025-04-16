@@ -269,12 +269,24 @@ function App() {
 
     } catch (error) {
       console.error('API Error:', error);
-      toast({
-        title: 'Error',
-        description: error.response?.data?.message || error.message,
-        status: 'error',
-        duration: 3000,
-      });
+      
+      // Handle 402 Payment Required error
+      if (error.response?.status === 402) {
+        toast({
+          title: 'Subscription Required',
+          description: 'This feature requires a paid API subscription. Please contact support for more information.',
+          status: 'error',
+          duration: 5000,
+          isClosable: true,
+        });
+      } else {
+        toast({
+          title: 'Error',
+          description: error.response?.data?.message || error.message || 'An error occurred while fetching toll information',
+          status: 'error',
+          duration: 3000,
+        });
+      }
     } finally {
       setIsLoading(false);
     }
