@@ -1,4 +1,20 @@
+import fetch from 'node-fetch';
+
 export default async function handler(req, res) {
+  // Set CORS headers
+  res.setHeader('Access-Control-Allow-Credentials', true);
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS');
+  res.setHeader(
+    'Access-Control-Allow-Headers',
+    'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version'
+  );
+
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
+  }
+
   const apiKey = '9c28d2905ccce4a47416a00db2a28d2930dc44564e48f5823b54c0809b8ce7b7';
   const { endpoint, ...params } = req.query;
   
@@ -16,71 +32,73 @@ export default async function handler(req, res) {
     }
 
     const url = `https://api.leptonmaps.com/v1/${endpoint}${queryString.toString() ? '?' + queryString.toString() : ''}`;
-    console.log('Proxy: Making request to:', url);
+    console.log('Requesting URL:', url);
 
     const response = await fetch(url, {
+      method: 'GET',
       headers: {
         'x-api-key': apiKey,
         'Accept': 'application/json'
       }
     });
 
+    const responseText = await response.text();
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch (e) {
+      console.error('Failed to parse response as JSON:', responseText);
+      return res.status(500).json({
+        error: 'Invalid JSON response from API',
+        details: responseText
+      });
+    }
+
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Proxy: API Error Response:', {
+      console.error('API Error Response:', {
         status: response.status,
         statusText: response.statusText,
-        body: errorText
+        data: data
       });
-
-      // Handle specific error cases
+      
       if (response.status === 402) {
         return res.status(402).json({
           error: 'API subscription required',
-          message: 'This feature requires a paid API subscription. Please contact support for more information.',
-          details: errorText
+          message: 'The API key requires a paid subscription or has exceeded its quota.',
+          details: data
         });
       }
-
+      
       return res.status(response.status).json({
         error: `API request failed with status ${response.status}`,
         message: response.statusText,
-        details: errorText
+        details: data
       });
     }
 
-    const data = await response.json();
-    
-    // Validate the response data
-    if (!data) {
-      console.error('Proxy: Empty response data');
-      return res.status(500).json({
-        error: 'Invalid API response',
-        message: 'The API returned an empty response'
-      });
-    }
+    console.log('API Success Response:', {
+      url,
+      params,
+      response: data
+    });
 
-    // For toll endpoint, validate required fields
-    if (endpoint === 'toll') {
-      if (!data.route || !Array.isArray(data.route) || data.route.length === 0) {
-        console.error('Proxy: No route data in response');
-        return res.status(404).json({
-          error: 'No route found',
-          message: 'Could not find a route between the specified locations'
-        });
-      }
-
-      console.log('Proxy: Successful toll response:', {
-        toll_count: data.toll_count,
-        total_toll_price: data.total_toll_price,
-        route_points: data.route.length,
-        has_toll_booths: !!data.toll_booths
+    // Validate toll data for toll endpoint
+    if (endpoint === 'toll' && (data.total_toll_price === undefined || data.total_toll_price === null)) {
+      console.error('Invalid toll data received:', data);
+      return res.status(400).json({
+        error: 'Invalid toll data',
+        message: 'The API response did not contain expected toll information',
+        details: data
       });
     }
 
     return res.status(200).json(data);
   } catch (error) {
-    console.error('Proxy: Error:', error);
+    console.error('Proxy Error:', {
+      error: error.message,
+      stack: error.stack,
+      params
+    });
     return res.status(500).json({
       error: 'Internal server error',
       message: error.message,
