@@ -1,20 +1,4 @@
-import fetch from 'node-fetch';
-
 export default async function handler(req, res) {
-  // Set CORS headers
-  res.setHeader('Access-Control-Allow-Credentials', true);
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS');
-  res.setHeader(
-    'Access-Control-Allow-Headers',
-    'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version'
-  );
-
-  if (req.method === 'OPTIONS') {
-    res.status(200).end();
-    return;
-  }
-
   const apiKey = '9c28d2905ccce4a47416a00db2a28d2930dc44564e48f5823b54c0809b8ce7b7';
   const { endpoint, ...params } = req.query;
   
@@ -32,10 +16,9 @@ export default async function handler(req, res) {
     }
 
     const url = `https://api.leptonmaps.com/v1/${endpoint}${queryString.toString() ? '?' + queryString.toString() : ''}`;
-    console.log('Requesting URL:', url);
+    console.log('Proxy: Making request to:', url);
 
     const response = await fetch(url, {
-      method: 'GET',
       headers: {
         'x-api-key': apiKey,
         'Accept': 'application/json'
@@ -44,21 +27,21 @@ export default async function handler(req, res) {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('API Error Response:', {
+      console.error('Proxy: API Error Response:', {
         status: response.status,
         statusText: response.statusText,
-        body: errorText,
-        headers: Object.fromEntries(response.headers.entries())
+        body: errorText
       });
-      
+
+      // Handle specific error cases
       if (response.status === 402) {
         return res.status(402).json({
           error: 'API subscription required',
-          message: 'The API key requires a paid subscription or has exceeded its quota.',
+          message: 'This feature requires a paid API subscription. Please contact support for more information.',
           details: errorText
         });
       }
-      
+
       return res.status(response.status).json({
         error: `API request failed with status ${response.status}`,
         message: response.statusText,
@@ -67,29 +50,37 @@ export default async function handler(req, res) {
     }
 
     const data = await response.json();
-    console.log('API Success Response:', {
-      url,
-      params,
-      response: data
-    });
+    
+    // Validate the response data
+    if (!data) {
+      console.error('Proxy: Empty response data');
+      return res.status(500).json({
+        error: 'Invalid API response',
+        message: 'The API returned an empty response'
+      });
+    }
 
-    // Validate toll data for toll endpoint (note: total_toll_price can be 0)
-    if (endpoint === 'toll' && typeof data.total_toll_price === 'undefined') {
-      console.error('Invalid toll data received:', data);
-      return res.status(400).json({
-        error: 'Invalid toll data',
-        message: 'The API response did not contain expected toll information',
-        details: data
+    // For toll endpoint, validate required fields
+    if (endpoint === 'toll') {
+      if (!data.route || !Array.isArray(data.route) || data.route.length === 0) {
+        console.error('Proxy: No route data in response');
+        return res.status(404).json({
+          error: 'No route found',
+          message: 'Could not find a route between the specified locations'
+        });
+      }
+
+      console.log('Proxy: Successful toll response:', {
+        toll_count: data.toll_count,
+        total_toll_price: data.total_toll_price,
+        route_points: data.route.length,
+        has_toll_booths: !!data.toll_booths
       });
     }
 
     return res.status(200).json(data);
   } catch (error) {
-    console.error('Proxy Error:', {
-      error: error.message,
-      stack: error.stack,
-      params
-    });
+    console.error('Proxy: Error:', error);
     return res.status(500).json({
       error: 'Internal server error',
       message: error.message,

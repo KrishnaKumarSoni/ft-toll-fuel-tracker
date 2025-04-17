@@ -200,51 +200,44 @@ function App() {
 
     setIsLoading(true);
     try {
-      // Try with a test route first
-      const testRoute = {
-        origin: 'Mumbai',
-        destination: 'Pune',
-        journey_type: 'PV_SJ'
+      // Clean up waypoints
+      const cleanWaypoints = tollWaypoints ? tollWaypoints.trim() : undefined;
+
+      // Prepare parameters
+      const params = {
+        endpoint: 'toll',
+        origin: tollOrigin.trim(),
+        destination: tollDestination.trim(),
+        journey_type: journeyType,
+        include_route: true,
+        include_route_metadata: true,
+        include_booths: true,
+        include_booths_locations: true
       };
 
-      console.log('Testing API with route:', testRoute);
-      const testResponse = await axios.get('/api/proxy', {
-        params: {
-          endpoint: 'toll',
-          ...testRoute,
-          include_route: true,
-          include_route_metadata: true,
-          include_booths: true,
-          include_booths_locations: true
-        }
-      });
-
-      console.log('Test response:', testResponse.data);
-
-      if (typeof testResponse.data.total_toll_price === 'undefined') {
-        throw new Error('API test failed - no toll data received');
+      // Only add waypoints if they exist
+      if (cleanWaypoints) {
+        params.waypoints = cleanWaypoints;
       }
 
-      // If test succeeds, proceed with actual route
-      const response = await axios.get('/api/proxy', {
-        params: {
-          endpoint: 'toll',
-          origin: tollOrigin,
-          destination: tollDestination,
-          waypoints: tollWaypoints || undefined,
-          journey_type: journeyType,
-          include_route: true,
-          include_route_metadata: true,
-          include_booths: true,
-          include_booths_locations: true
-        }
-      });
-      
+      console.log('Sending request with params:', params);
+
+      const response = await axios.get('/api/proxy', { params });
       const data = response.data;
       
-      // Validate toll data
-      if (typeof data.total_toll_price === 'undefined') {
-        throw new Error('No toll data received for the specified route');
+      // Validate the response
+      if (!data) {
+        throw new Error('No data received from API');
+      }
+
+      if (!data.total_toll_price && !data.toll_booths?.length) {
+        toast({
+          title: 'No Toll Data',
+          description: 'No toll booths found on this route. This might be due to incomplete data or an API issue.',
+          status: 'warning',
+          duration: 5000,
+          isClosable: true,
+        });
       }
       
       // Process toll booths if they exist
@@ -259,37 +252,28 @@ function App() {
       
       setResults(data);
 
-      // Set origin and destination coordinates
-      if (data.route?.length > 0) {
-        setOriginCoord([data.route[0][1], data.route[0][0]]);
-        setDestCoord([data.route[data.route.length - 1][1], data.route[data.route.length - 1][0]]);
-      }
-
-      // Prepare toll data to send back
-      const tollData = {
-        total_toll_price: data.total_toll_price || 0,
-        toll_count: data.toll_count || 0,
-        distance_km: data.route_metadata?.distance_km || 0,
-        duration_min: data.route_metadata?.duration_min || 0,
-        origin: tollOrigin,
-        destination: tollDestination,
-        waypoints: tollWaypoints,
-        vehicle: journeyType,
-        toll_booths: data.toll_booths?.map(booth => ({
-          name: booth.name,
-          price: booth.price
-        })) || []
-      };
-
-      // Send data back to opener window if it exists
+      // If we have an opener window, send the data back
       if (window.opener) {
-        // Using postMessage - this is the safe cross-origin method
+        const tollData = {
+          total_toll_price: data.total_toll_price || 0,
+          toll_count: data.toll_count || 0,
+          distance_km: data.route_metadata?.distance_km || 0,
+          duration_min: data.route_metadata?.duration_min || 0,
+          origin: tollOrigin,
+          destination: tollDestination,
+          waypoints: cleanWaypoints,
+          vehicle: journeyType,
+          toll_booths: data.toll_booths?.map(booth => ({
+            name: booth.name,
+            price: booth.price
+          })) || []
+        };
+
         window.opener.postMessage({
           type: 'TOLL_DATA',
           data: tollData
         }, '*');
 
-        // Show success message
         toast({
           title: 'Data Sent',
           description: 'Toll information has been sent back to the main window',
@@ -300,20 +284,13 @@ function App() {
 
     } catch (error) {
       console.error('API Error:', error);
+      console.error('Error response:', error.response?.data);
       
       if (error.response?.status === 402) {
         toast({
           title: 'Subscription Required',
           description: 'This feature requires a paid API subscription. Please contact support for more information.',
           status: 'error',
-          duration: 5000,
-          isClosable: true,
-        });
-      } else if (error.message === 'No toll data received for the specified route') {
-        toast({
-          title: 'No Toll Data',
-          description: 'No toll information found for this route. Try a different route or check the locations.',
-          status: 'warning',
           duration: 5000,
           isClosable: true,
         });

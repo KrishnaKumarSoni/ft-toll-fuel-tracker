@@ -27,12 +27,9 @@ export default async function handler(req, res) {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('API Error Response:', {
-        status: response.status,
-        statusText: response.statusText,
-        body: errorText,
-        headers: Object.fromEntries(response.headers.entries())
-      });
+      console.error('API Error Response:', errorText);
+      console.error('Response Status:', response.status);
+      console.error('Response Headers:', Object.fromEntries(response.headers.entries()));
       
       if (response.status === 402) {
         return res.status(402).json({
@@ -50,29 +47,16 @@ export default async function handler(req, res) {
     }
 
     const data = await response.json();
-    console.log('API Success Response:', {
-      url: url,
-      params: params,
-      response: data
-    });
-
-    // Validate toll data
-    if (data && typeof data.total_toll_price === 'undefined') {
-      console.error('Invalid toll data received:', data);
-      return res.status(400).json({
-        error: 'Invalid toll data',
-        message: 'The API response did not contain expected toll information',
-        details: data
-      });
+    console.log('API Response Data:', JSON.stringify(data, null, 2));
+    
+    // Validate the response data
+    if (!data.total_toll_price && !data.toll_booths) {
+      console.warn('Warning: API returned zero toll data');
     }
 
     return res.status(200).json(data);
   } catch (error) {
-    console.error('Proxy Error:', {
-      error: error.message,
-      stack: error.stack,
-      params: params
-    });
+    console.error('Proxy Error:', error);
     return res.status(500).json({
       error: 'Internal server error',
       message: error.message,
