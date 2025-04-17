@@ -183,7 +183,7 @@ function TollLabel({ position, price }) {
 function App() {
   const [tollOrigin, setTollOrigin] = useState('');
   const [tollDestination, setTollDestination] = useState('');
-  const [journeyType, setJourneyType] = useState('PV_SJ');
+  const [journeyType, setJourneyType] = useState('4TO6AX_SJ');
   const [fuelLocation, setFuelLocation] = useState('');
   const [fuelType, setFuelType] = useState('petrol');
   const [results, setResults] = useState(null);
@@ -733,21 +733,6 @@ function App() {
                         onChange={(e) => setJourneyType(e.target.value)}
                         isDisabled={isLoading}
                       >
-                        <option value="2W_SJ">Two Wheeler - Single Journey</option>
-                        <option value="2W_RJ">Two Wheeler - Return Journey</option>
-                        <option value="2W_MP">Two Wheeler - Monthly Pass</option>
-                        <option value="PV_SJ">Personal Vehicle - Single Journey</option>
-                        <option value="PV_RJ">Personal Vehicle - Return Journey</option>
-                        <option value="PV_MP">Personal Vehicle - Monthly Pass</option>
-                        <option value="LCV_SJ">Light Commercial Vehicle - Single Journey</option>
-                        <option value="LCV_RJ">Light Commercial Vehicle - Return Journey</option>
-                        <option value="LCV_MP">Light Commercial Vehicle - Monthly Journey</option>
-                        <option value="BUS_SJ">Bus/Truck - Single Journey</option>
-                        <option value="BUS_RJ">Bus/Truck - Return Journey</option>
-                        <option value="BUS_MP">Bus/Truck - Monthly Journey</option>
-                        <option value="3AX_SJ">Up to 3 Axle Vehicle - Single Journey</option>
-                        <option value="3AX_RJ">Up to 3 Axle Vehicle - Return Journey</option>
-                        <option value="3AX_MP">Up to 3 Axle Vehicle - Monthly Journey</option>
                         <option value="4TO6AX_SJ">4 to 6 Axle Vehicle - Single Journey</option>
                         <option value="4TO6AX_RJ">4 to 6 Axle Vehicle - Return Journey</option>
                         <option value="4TO6AX_MP">4 to 6 Axle Vehicle - Monthly Journey</option>
