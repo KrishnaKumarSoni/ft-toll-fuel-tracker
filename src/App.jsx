@@ -200,45 +200,21 @@ function App() {
 
     setIsLoading(true);
     try {
-      // Clean up waypoints
-      const cleanWaypoints = tollWaypoints ? tollWaypoints.trim() : undefined;
-
-      // Prepare parameters
-      const params = {
-        endpoint: 'toll',
-        origin: tollOrigin.trim(),
-        destination: tollDestination.trim(),
-        journey_type: journeyType,
-        include_route: true,
-        include_route_metadata: true,
-        include_booths: true,
-        include_booths_locations: true
-      };
-
-      // Only add waypoints if they exist
-      if (cleanWaypoints) {
-        params.waypoints = cleanWaypoints;
-      }
-
-      console.log('Sending request with params:', params);
-
-      const response = await axios.get('/api/proxy', { params });
-      const data = response.data;
+      const response = await axios.get('/api/proxy', {
+        params: {
+          endpoint: 'toll',
+          origin: tollOrigin,
+          destination: tollDestination,
+          waypoints: tollWaypoints || undefined,
+          journey_type: journeyType,
+          include_route: true,
+          include_route_metadata: true,
+          include_booths: true,
+          include_booths_locations: true
+        }
+      });
       
-      // Validate the response
-      if (!data) {
-        throw new Error('No data received from API');
-      }
-
-      if (!data.total_toll_price && !data.toll_booths?.length) {
-        toast({
-          title: 'No Toll Data',
-          description: 'No toll booths found on this route. This might be due to incomplete data or an API issue.',
-          status: 'warning',
-          duration: 5000,
-          isClosable: true,
-        });
-      }
+      const data = response.data;
       
       // Process toll booths if they exist
       if (data.toll_booths) {
@@ -252,28 +228,37 @@ function App() {
       
       setResults(data);
 
-      // If we have an opener window, send the data back
-      if (window.opener) {
-        const tollData = {
-          total_toll_price: data.total_toll_price || 0,
-          toll_count: data.toll_count || 0,
-          distance_km: data.route_metadata?.distance_km || 0,
-          duration_min: data.route_metadata?.duration_min || 0,
-          origin: tollOrigin,
-          destination: tollDestination,
-          waypoints: cleanWaypoints,
-          vehicle: journeyType,
-          toll_booths: data.toll_booths?.map(booth => ({
-            name: booth.name,
-            price: booth.price
-          })) || []
-        };
+      // Set origin and destination coordinates
+      if (data.route?.length > 0) {
+        setOriginCoord([data.route[0][1], data.route[0][0]]);
+        setDestCoord([data.route[data.route.length - 1][1], data.route[data.route.length - 1][0]]);
+      }
 
+      // Prepare toll data to send back
+      const tollData = {
+        total_toll_price: data.total_toll_price || 0,
+        toll_count: data.toll_count || 0,
+        distance_km: data.route_metadata?.distance_km || 0,
+        duration_min: data.route_metadata?.duration_min || 0,
+        origin: tollOrigin,
+        destination: tollDestination,
+        waypoints: tollWaypoints,
+        vehicle: journeyType,
+        toll_booths: data.toll_booths?.map(booth => ({
+          name: booth.name,
+          price: booth.price
+        })) || []
+      };
+
+      // Send data back to opener window if it exists
+      if (window.opener) {
+        // Using postMessage - this is the safe cross-origin method
         window.opener.postMessage({
           type: 'TOLL_DATA',
           data: tollData
         }, '*');
 
+        // Show success message
         toast({
           title: 'Data Sent',
           description: 'Toll information has been sent back to the main window',
@@ -284,8 +269,8 @@ function App() {
 
     } catch (error) {
       console.error('API Error:', error);
-      console.error('Error response:', error.response?.data);
       
+      // Handle 402 Payment Required error
       if (error.response?.status === 402) {
         toast({
           title: 'Subscription Required',

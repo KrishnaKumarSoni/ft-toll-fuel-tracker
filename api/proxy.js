@@ -16,7 +16,7 @@ export default async function handler(req, res) {
     }
 
     const url = `https://api.leptonmaps.com/v1/${endpoint}${queryString.toString() ? '?' + queryString.toString() : ''}`;
-    console.log('Requesting URL:', url);
+    console.log('Requesting URL:', url); // For debugging
 
     const response = await fetch(url, {
       headers: {
@@ -28,32 +28,13 @@ export default async function handler(req, res) {
     if (!response.ok) {
       const errorText = await response.text();
       console.error('API Error Response:', errorText);
-      console.error('Response Status:', response.status);
-      console.error('Response Headers:', Object.fromEntries(response.headers.entries()));
-      
-      if (response.status === 402) {
-        return res.status(402).json({
-          error: 'API subscription required',
-          message: 'The API key requires a paid subscription or has exceeded its quota.',
-          details: errorText
-        });
-      }
-      
       return res.status(response.status).json({
         error: `API request failed with status ${response.status}`,
-        message: response.statusText,
         details: errorText
       });
     }
 
     const data = await response.json();
-    console.log('API Response Data:', JSON.stringify(data, null, 2));
-    
-    // Validate the response data
-    if (!data.total_toll_price && !data.toll_booths) {
-      console.warn('Warning: API returned zero toll data');
-    }
-
     return res.status(200).json(data);
   } catch (error) {
     console.error('Proxy Error:', error);
