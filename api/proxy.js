@@ -16,7 +16,7 @@ export default async function handler(req, res) {
     }
 
     const url = `https://api.leptonmaps.com/v1/${endpoint}${queryString.toString() ? '?' + queryString.toString() : ''}`;
-    console.log('Requesting URL:', url); // For debugging
+    console.log('Proxy: Making request to:', url);
 
     const response = await fetch(url, {
       headers: {
@@ -27,17 +27,29 @@ export default async function handler(req, res) {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('API Error Response:', errorText);
+      console.error('Proxy: API Error Response:', {
+        status: response.status,
+        statusText: response.statusText,
+        body: errorText
+      });
       return res.status(response.status).json({
         error: `API request failed with status ${response.status}`,
+        message: response.statusText,
         details: errorText
       });
     }
 
     const data = await response.json();
+    console.log('Proxy: Successful response:', {
+      toll_count: data.toll_count,
+      total_toll_price: data.total_toll_price,
+      has_route: !!data.route,
+      has_toll_booths: !!data.toll_booths
+    });
+
     return res.status(200).json(data);
   } catch (error) {
-    console.error('Proxy Error:', error);
+    console.error('Proxy: Error:', error);
     return res.status(500).json({
       error: 'Internal server error',
       message: error.message,

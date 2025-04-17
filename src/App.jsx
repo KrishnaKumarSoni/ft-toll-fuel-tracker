@@ -240,6 +240,14 @@ function App() {
         .filter(wp => wp.trim() !== '')
         .join('|');
 
+      // Log the request parameters
+      console.log('Making API request with params:', {
+        origin: tollOrigin,
+        destination: tollDestination,
+        waypoints: waypointsString,
+        journey_type: journeyType
+      });
+
       const response = await axios.get('/api/proxy', {
         params: {
           endpoint: 'toll',
@@ -254,7 +262,22 @@ function App() {
         }
       });
       
+      // Log the full API response
+      console.log('Full API Response:', response.data);
+
       const data = response.data;
+      
+      // Validate the response data
+      if (!data || (data.toll_count === 0 && !data.route)) {
+        console.warn('API returned no toll data:', data);
+        toast({
+          title: 'No Toll Data',
+          description: 'No toll booths found on this route. This might be because the route has no toll roads or the locations could not be found.',
+          status: 'warning',
+          duration: 5000,
+          isClosable: true,
+        });
+      }
       
       // Process toll booths if they exist
       if (data.toll_booths) {
@@ -272,6 +295,8 @@ function App() {
       if (data.route?.length > 0) {
         setOriginCoord([data.route[0][1], data.route[0][0]]);
         setDestCoord([data.route[data.route.length - 1][1], data.route[data.route.length - 1][0]]);
+      } else {
+        console.warn('No route data in API response');
       }
 
       // Prepare toll data to send back
@@ -290,15 +315,16 @@ function App() {
         })) || []
       };
 
+      // Log the processed toll data
+      console.log('Processed toll data:', tollData);
+
       // Send data back to opener window if it exists
       if (window.opener) {
-        // Using postMessage - this is the safe cross-origin method
         window.opener.postMessage({
           type: 'TOLL_DATA',
           data: tollData
         }, '*');
 
-        // Show success message
         toast({
           title: 'Data Sent',
           description: 'Toll information has been sent back to the main window',
@@ -309,24 +335,25 @@ function App() {
 
     } catch (error) {
       console.error('API Error:', error);
+      console.error('Error response:', error.response?.data);
       
-      // Handle 402 Payment Required error
+      // More specific error messages
+      let errorMessage = 'An error occurred while fetching toll information';
       if (error.response?.status === 402) {
-        toast({
-          title: 'Subscription Required',
-          description: 'This feature requires a paid API subscription. Please contact support for more information.',
-          status: 'error',
-          duration: 5000,
-          isClosable: true,
-        });
-      } else {
-        toast({
-          title: 'Error',
-          description: error.response?.data?.message || error.message || 'An error occurred while fetching toll information',
-          status: 'error',
-          duration: 3000,
-        });
+        errorMessage = 'This feature requires a paid API subscription. Please contact support for more information.';
+      } else if (error.response?.status === 404) {
+        errorMessage = 'Could not find a route between the specified locations. Please check the addresses and try again.';
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
       }
+
+      toast({
+        title: 'Error',
+        description: errorMessage,
+        status: 'error',
+        duration: 5000,
+        isClosable: true,
+      });
     } finally {
       setIsLoading(false);
     }
