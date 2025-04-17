@@ -221,7 +221,7 @@ function App() {
 
       console.log('Test response:', testResponse.data);
 
-      if (!testResponse.data.total_toll_price && testResponse.data.total_toll_price !== 0) {
+      if (typeof testResponse.data.total_toll_price === 'undefined') {
         throw new Error('API test failed - no toll data received');
       }
 
@@ -243,7 +243,7 @@ function App() {
       const data = response.data;
       
       // Validate toll data
-      if (!data.total_toll_price && data.total_toll_price !== 0) {
+      if (typeof data.total_toll_price === 'undefined') {
         throw new Error('No toll data received for the specified route');
       }
       
