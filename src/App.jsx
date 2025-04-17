@@ -21,6 +21,14 @@ import {
   FormControl,
   FormLabel,
   FormHelperText,
+  IconButton,
+  useDisclosure,
+  AlertDialog,
+  AlertDialogBody,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogContent,
+  AlertDialogOverlay,
 } from '@chakra-ui/react';
 import { useToast } from '@chakra-ui/react';
 import axios from 'axios';
@@ -175,7 +183,6 @@ function TollLabel({ position, price }) {
 function App() {
   const [tollOrigin, setTollOrigin] = useState('');
   const [tollDestination, setTollDestination] = useState('');
-  const [tollWaypoints, setTollWaypoints] = useState('');
   const [journeyType, setJourneyType] = useState('PV_SJ');
   const [fuelLocation, setFuelLocation] = useState('');
   const [fuelType, setFuelType] = useState('petrol');
@@ -185,9 +192,30 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [originCoord, setOriginCoord] = useState(null);
   const [destCoord, setDestCoord] = useState(null);
+  const [waypoints, setWaypoints] = useState(['']);
+  const { isOpen, onOpen, onClose } = useDisclosure();
+  const cancelRef = useRef();
   const toast = useToast();
 
-  const handleTollSearch = async () => {
+  // Function to handle waypoint changes
+  const handleWaypointChange = (index, value) => {
+    const newWaypoints = [...waypoints];
+    newWaypoints[index] = value;
+    setWaypoints(newWaypoints);
+  };
+
+  // Function to add new waypoint input
+  const addWaypoint = () => {
+    setWaypoints([...waypoints, '']);
+  };
+
+  // Function to remove waypoint input
+  const removeWaypoint = (index) => {
+    const newWaypoints = waypoints.filter((_, i) => i !== index);
+    setWaypoints(newWaypoints);
+  };
+
+  const handleTollSearch = async (confirmed = false) => {
     if (!tollOrigin || !tollDestination) {
       toast({
         title: 'Error',
@@ -198,14 +226,26 @@ function App() {
       return;
     }
 
+    // Check if waypoints are empty and not confirmed
+    const hasEmptyWaypoints = waypoints.some(wp => wp.trim() === '');
+    if (hasEmptyWaypoints && !confirmed) {
+      onOpen();
+      return;
+    }
+
     setIsLoading(true);
     try {
+      // Filter out empty waypoints and join with |
+      const waypointsString = waypoints
+        .filter(wp => wp.trim() !== '')
+        .join('|');
+
       const response = await axios.get('/api/proxy', {
         params: {
           endpoint: 'toll',
           origin: tollOrigin,
           destination: tollDestination,
-          waypoints: tollWaypoints || undefined,
+          waypoints: waypointsString || undefined,
           journey_type: journeyType,
           include_route: true,
           include_route_metadata: true,
@@ -242,7 +282,7 @@ function App() {
         duration_min: data.route_metadata?.duration_min || 0,
         origin: tollOrigin,
         destination: tollDestination,
-        waypoints: tollWaypoints,
+        waypoints: waypointsString,
         vehicle: journeyType,
         toll_booths: data.toll_booths?.map(booth => ({
           name: booth.name,
@@ -432,7 +472,7 @@ function App() {
     // Set form values if URL parameters exist
     if (origin) setTollOrigin(decodeURIComponent(origin));
     if (destination) setTollDestination(decodeURIComponent(destination));
-    if (waypoints) setTollWaypoints(decodeURIComponent(waypoints));
+    if (waypoints) setWaypoints(decodeURIComponent(waypoints));
     if (vehicle) setJourneyType(decodeURIComponent(vehicle));
     
     // If format=json, we'll return just the toll data
@@ -654,17 +694,40 @@ function App() {
                         onChange={(e) => setTollDestination(e.target.value)}
                         isDisabled={isLoading}
                       />
+                      
+                      {/* Waypoints section */}
                       <FormControl>
-                        <Input
-                          placeholder="Waypoints (separated by | e.g. 'Gurgaon|Jaipur')"
-                          value={tollWaypoints}
-                          onChange={(e) => setTollWaypoints(e.target.value)}
-                          isDisabled={isLoading}
-                        />
-                        <FormHelperText fontSize="xs">
-                          Separate multiple waypoints with | character. You may use either latitude longitude pairs or location names. For example: Hosur|Krishnagiri|Vellore or like this - 12.9716,77.5946|13.0691,77.7982|12.9273,79.3330|13.0827,80.2707
-                        </FormHelperText>
+                        <FormLabel>Waypoints</FormLabel>
+                        {waypoints.map((waypoint, index) => (
+                          <HStack key={index} mt={2}>
+                            <Input
+                              placeholder={`Waypoint ${index + 1}`}
+                              value={waypoint}
+                              onChange={(e) => handleWaypointChange(index, e.target.value)}
+                              isDisabled={isLoading}
+                            />
+                            {waypoints.length > 1 && (
+                              <IconButton
+                                icon={<Text>-</Text>}
+                                onClick={() => removeWaypoint(index)}
+                                isDisabled={isLoading}
+                                colorScheme="red"
+                                variant="outline"
+                              />
+                            )}
+                            {index === waypoints.length - 1 && (
+                              <IconButton
+                                icon={<Text>+</Text>}
+                                onClick={addWaypoint}
+                                isDisabled={isLoading}
+                                colorScheme="green"
+                                variant="outline"
+                              />
+                            )}
+                          </HStack>
+                        ))}
                       </FormControl>
+
                       <Select
                         value={journeyType}
                         onChange={(e) => setJourneyType(e.target.value)}
@@ -696,7 +759,7 @@ function App() {
                         <option value="7AX_MP">7 or More Axle Vehicle - Monthly Journey</option>
                       </Select>
                       <Button
-                        onClick={handleTollSearch}
+                        onClick={() => handleTollSearch()}
                         isLoading={isLoading}
                         loadingText="Searching..."
                       >
@@ -735,6 +798,41 @@ function App() {
             </VStack>
           </GridItem>
         </Grid>
+
+        {/* Add the confirmation dialog */}
+        <AlertDialog
+          isOpen={isOpen}
+          leastDestructiveRef={cancelRef}
+          onClose={onClose}
+        >
+          <AlertDialogOverlay>
+            <AlertDialogContent>
+              <AlertDialogHeader fontSize="lg" fontWeight="bold">
+                Empty Waypoints
+              </AlertDialogHeader>
+
+              <AlertDialogBody>
+                You haven't entered all waypoints. Are you sure you want to continue without them?
+              </AlertDialogBody>
+
+              <AlertDialogFooter>
+                <Button ref={cancelRef} onClick={onClose}>
+                  Cancel
+                </Button>
+                <Button
+                  colorScheme="yellow"
+                  onClick={() => {
+                    onClose();
+                    handleTollSearch(true);
+                  }}
+                  ml={3}
+                >
+                  Continue
+                </Button>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialogOverlay>
+        </AlertDialog>
       </Box>
     </ChakraProvider>
   );
