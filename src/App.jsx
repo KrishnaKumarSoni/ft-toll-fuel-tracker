@@ -21,14 +21,6 @@ import {
   FormControl,
   FormLabel,
   FormHelperText,
-  IconButton,
-  useDisclosure,
-  AlertDialog,
-  AlertDialogBody,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogContent,
-  AlertDialogOverlay,
 } from '@chakra-ui/react';
 import { useToast } from '@chakra-ui/react';
 import axios from 'axios';
@@ -183,7 +175,8 @@ function TollLabel({ position, price }) {
 function App() {
   const [tollOrigin, setTollOrigin] = useState('');
   const [tollDestination, setTollDestination] = useState('');
-  const [journeyType, setJourneyType] = useState('4TO6AX_SJ');
+  const [tollWaypoints, setTollWaypoints] = useState('');
+  const [journeyType, setJourneyType] = useState('PV_SJ');
   const [fuelLocation, setFuelLocation] = useState('');
   const [fuelType, setFuelType] = useState('petrol');
   const [results, setResults] = useState(null);
@@ -192,30 +185,9 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [originCoord, setOriginCoord] = useState(null);
   const [destCoord, setDestCoord] = useState(null);
-  const [waypoints, setWaypoints] = useState(['']);
-  const { isOpen, onOpen, onClose } = useDisclosure();
-  const cancelRef = useRef();
   const toast = useToast();
 
-  // Function to handle waypoint changes
-  const handleWaypointChange = (index, value) => {
-    const newWaypoints = [...waypoints];
-    newWaypoints[index] = value;
-    setWaypoints(newWaypoints);
-  };
-
-  // Function to add new waypoint input
-  const addWaypoint = () => {
-    setWaypoints([...waypoints, '']);
-  };
-
-  // Function to remove waypoint input
-  const removeWaypoint = (index) => {
-    const newWaypoints = waypoints.filter((_, i) => i !== index);
-    setWaypoints(newWaypoints);
-  };
-
-  const handleTollSearch = async (confirmed = false) => {
+  const handleTollSearch = async () => {
     if (!tollOrigin || !tollDestination) {
       toast({
         title: 'Error',
@@ -226,34 +198,14 @@ function App() {
       return;
     }
 
-    // Check if waypoints are empty and not confirmed
-    const hasEmptyWaypoints = waypoints.some(wp => wp.trim() === '');
-    if (hasEmptyWaypoints && !confirmed) {
-      onOpen();
-      return;
-    }
-
     setIsLoading(true);
     try {
-      // Filter out empty waypoints and join with |
-      const waypointsString = waypoints
-        .filter(wp => wp.trim() !== '')
-        .join('|');
-
-      // Log the request parameters
-      console.log('Making API request with params:', {
-        origin: tollOrigin,
-        destination: tollDestination,
-        waypoints: waypointsString,
-        journey_type: journeyType
-      });
-
       const response = await axios.get('/api/proxy', {
         params: {
           endpoint: 'toll',
           origin: tollOrigin,
           destination: tollDestination,
-          waypoints: waypointsString || undefined,
+          waypoints: tollWaypoints || undefined,
           journey_type: journeyType,
           include_route: true,
           include_route_metadata: true,
@@ -262,22 +214,7 @@ function App() {
         }
       });
       
-      // Log the full API response
-      console.log('Full API Response:', response.data);
-
       const data = response.data;
-      
-      // Validate the response data
-      if (!data || (data.toll_count === 0 && !data.route)) {
-        console.warn('API returned no toll data:', data);
-        toast({
-          title: 'No Toll Data',
-          description: 'No toll booths found on this route. This might be because the route has no toll roads or the locations could not be found.',
-          status: 'warning',
-          duration: 5000,
-          isClosable: true,
-        });
-      }
       
       // Process toll booths if they exist
       if (data.toll_booths) {
@@ -295,8 +232,6 @@ function App() {
       if (data.route?.length > 0) {
         setOriginCoord([data.route[0][1], data.route[0][0]]);
         setDestCoord([data.route[data.route.length - 1][1], data.route[data.route.length - 1][0]]);
-      } else {
-        console.warn('No route data in API response');
       }
 
       // Prepare toll data to send back
@@ -307,7 +242,7 @@ function App() {
         duration_min: data.route_metadata?.duration_min || 0,
         origin: tollOrigin,
         destination: tollDestination,
-        waypoints: waypointsString,
+        waypoints: tollWaypoints,
         vehicle: journeyType,
         toll_booths: data.toll_booths?.map(booth => ({
           name: booth.name,
@@ -315,16 +250,15 @@ function App() {
         })) || []
       };
 
-      // Log the processed toll data
-      console.log('Processed toll data:', tollData);
-
       // Send data back to opener window if it exists
       if (window.opener) {
+        // Using postMessage - this is the safe cross-origin method
         window.opener.postMessage({
           type: 'TOLL_DATA',
           data: tollData
         }, '*');
 
+        // Show success message
         toast({
           title: 'Data Sent',
           description: 'Toll information has been sent back to the main window',
@@ -335,25 +269,24 @@ function App() {
 
     } catch (error) {
       console.error('API Error:', error);
-      console.error('Error response:', error.response?.data);
       
-      // More specific error messages
-      let errorMessage = 'An error occurred while fetching toll information';
+      // Handle 402 Payment Required error
       if (error.response?.status === 402) {
-        errorMessage = 'This feature requires a paid API subscription. Please contact support for more information.';
-      } else if (error.response?.status === 404) {
-        errorMessage = 'Could not find a route between the specified locations. Please check the addresses and try again.';
-      } else if (error.response?.data?.message) {
-        errorMessage = error.response.data.message;
+        toast({
+          title: 'Subscription Required',
+          description: 'This feature requires a paid API subscription. Please contact support for more information.',
+          status: 'error',
+          duration: 5000,
+          isClosable: true,
+        });
+      } else {
+        toast({
+          title: 'Error',
+          description: error.response?.data?.message || error.message || 'An error occurred while fetching toll information',
+          status: 'error',
+          duration: 3000,
+        });
       }
-
-      toast({
-        title: 'Error',
-        description: errorMessage,
-        status: 'error',
-        duration: 5000,
-        isClosable: true,
-      });
     } finally {
       setIsLoading(false);
     }
@@ -499,7 +432,7 @@ function App() {
     // Set form values if URL parameters exist
     if (origin) setTollOrigin(decodeURIComponent(origin));
     if (destination) setTollDestination(decodeURIComponent(destination));
-    if (waypoints) setWaypoints(decodeURIComponent(waypoints));
+    if (waypoints) setTollWaypoints(decodeURIComponent(waypoints));
     if (vehicle) setJourneyType(decodeURIComponent(vehicle));
     
     // If format=json, we'll return just the toll data
@@ -721,45 +654,34 @@ function App() {
                         onChange={(e) => setTollDestination(e.target.value)}
                         isDisabled={isLoading}
                       />
-                      
-                      {/* Waypoints section */}
                       <FormControl>
-                        <FormLabel>Waypoints</FormLabel>
-                        {waypoints.map((waypoint, index) => (
-                          <HStack key={index} mt={2}>
-                            <Input
-                              placeholder={`Waypoint ${index + 1}`}
-                              value={waypoint}
-                              onChange={(e) => handleWaypointChange(index, e.target.value)}
-                              isDisabled={isLoading}
-                            />
-                            {waypoints.length > 1 && (
-                              <IconButton
-                                icon={<Text>-</Text>}
-                                onClick={() => removeWaypoint(index)}
-                                isDisabled={isLoading}
-                                colorScheme="red"
-                                variant="outline"
-                              />
-                            )}
-                            {index === waypoints.length - 1 && (
-                              <IconButton
-                                icon={<Text>+</Text>}
-                                onClick={addWaypoint}
-                                isDisabled={isLoading}
-                                colorScheme="green"
-                                variant="outline"
-                              />
-                            )}
-                          </HStack>
-                        ))}
+                        <Input
+                          placeholder="Waypoints (separated by | e.g. 'Gurgaon|Jaipur')"
+                          value={tollWaypoints}
+                          onChange={(e) => setTollWaypoints(e.target.value)}
+                          isDisabled={isLoading}
+                        />
                       </FormControl>
-
                       <Select
                         value={journeyType}
                         onChange={(e) => setJourneyType(e.target.value)}
                         isDisabled={isLoading}
                       >
+                        <option value="2W_SJ">Two Wheeler - Single Journey</option>
+                        <option value="2W_RJ">Two Wheeler - Return Journey</option>
+                        <option value="2W_MP">Two Wheeler - Monthly Pass</option>
+                        <option value="PV_SJ">Personal Vehicle - Single Journey</option>
+                        <option value="PV_RJ">Personal Vehicle - Return Journey</option>
+                        <option value="PV_MP">Personal Vehicle - Monthly Pass</option>
+                        <option value="LCV_SJ">Light Commercial Vehicle - Single Journey</option>
+                        <option value="LCV_RJ">Light Commercial Vehicle - Return Journey</option>
+                        <option value="LCV_MP">Light Commercial Vehicle - Monthly Journey</option>
+                        <option value="BUS_SJ">Bus/Truck - Single Journey</option>
+                        <option value="BUS_RJ">Bus/Truck - Return Journey</option>
+                        <option value="BUS_MP">Bus/Truck - Monthly Journey</option>
+                        <option value="3AX_SJ">Up to 3 Axle Vehicle - Single Journey</option>
+                        <option value="3AX_RJ">Up to 3 Axle Vehicle - Return Journey</option>
+                        <option value="3AX_MP">Up to 3 Axle Vehicle - Monthly Journey</option>
                         <option value="4TO6AX_SJ">4 to 6 Axle Vehicle - Single Journey</option>
                         <option value="4TO6AX_RJ">4 to 6 Axle Vehicle - Return Journey</option>
                         <option value="4TO6AX_MP">4 to 6 Axle Vehicle - Monthly Journey</option>
@@ -771,7 +693,7 @@ function App() {
                         <option value="7AX_MP">7 or More Axle Vehicle - Monthly Journey</option>
                       </Select>
                       <Button
-                        onClick={() => handleTollSearch()}
+                        onClick={handleTollSearch}
                         isLoading={isLoading}
                         loadingText="Searching..."
                       >
@@ -810,41 +732,6 @@ function App() {
             </VStack>
           </GridItem>
         </Grid>
-
-        {/* Add the confirmation dialog */}
-        <AlertDialog
-          isOpen={isOpen}
-          leastDestructiveRef={cancelRef}
-          onClose={onClose}
-        >
-          <AlertDialogOverlay>
-            <AlertDialogContent>
-              <AlertDialogHeader fontSize="lg" fontWeight="bold">
-                Empty Waypoints
-              </AlertDialogHeader>
-
-              <AlertDialogBody>
-                You haven't entered all waypoints. Are you sure you want to continue without them?
-              </AlertDialogBody>
-
-              <AlertDialogFooter>
-                <Button ref={cancelRef} onClick={onClose}>
-                  Cancel
-                </Button>
-                <Button
-                  colorScheme="yellow"
-                  onClick={() => {
-                    onClose();
-                    handleTollSearch(true);
-                  }}
-                  ml={3}
-                >
-                  Continue
-                </Button>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialogOverlay>
-        </AlertDialog>
       </Box>
     </ChakraProvider>
   );
