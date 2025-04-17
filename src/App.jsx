@@ -200,6 +200,32 @@ function App() {
 
     setIsLoading(true);
     try {
+      // Try with a test route first
+      const testRoute = {
+        origin: 'Mumbai',
+        destination: 'Pune',
+        journey_type: 'PV_SJ'
+      };
+
+      console.log('Testing API with route:', testRoute);
+      const testResponse = await axios.get('/api/proxy', {
+        params: {
+          endpoint: 'toll',
+          ...testRoute,
+          include_route: true,
+          include_route_metadata: true,
+          include_booths: true,
+          include_booths_locations: true
+        }
+      });
+
+      console.log('Test response:', testResponse.data);
+
+      if (!testResponse.data.total_toll_price && testResponse.data.total_toll_price !== 0) {
+        throw new Error('API test failed - no toll data received');
+      }
+
+      // If test succeeds, proceed with actual route
       const response = await axios.get('/api/proxy', {
         params: {
           endpoint: 'toll',
@@ -215,6 +241,11 @@ function App() {
       });
       
       const data = response.data;
+      
+      // Validate toll data
+      if (!data.total_toll_price && data.total_toll_price !== 0) {
+        throw new Error('No toll data received for the specified route');
+      }
       
       // Process toll booths if they exist
       if (data.toll_booths) {
@@ -270,12 +301,19 @@ function App() {
     } catch (error) {
       console.error('API Error:', error);
       
-      // Handle 402 Payment Required error
       if (error.response?.status === 402) {
         toast({
           title: 'Subscription Required',
           description: 'This feature requires a paid API subscription. Please contact support for more information.',
           status: 'error',
+          duration: 5000,
+          isClosable: true,
+        });
+      } else if (error.message === 'No toll data received for the specified route') {
+        toast({
+          title: 'No Toll Data',
+          description: 'No toll information found for this route. Try a different route or check the locations.',
+          status: 'warning',
           duration: 5000,
           isClosable: true,
         });

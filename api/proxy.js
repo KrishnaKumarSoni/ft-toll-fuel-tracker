@@ -16,7 +16,7 @@ export default async function handler(req, res) {
     }
 
     const url = `https://api.leptonmaps.com/v1/${endpoint}${queryString.toString() ? '?' + queryString.toString() : ''}`;
-    console.log('Requesting URL:', url); // For debugging
+    console.log('Requesting URL:', url);
 
     const response = await fetch(url, {
       headers: {
@@ -27,17 +27,52 @@ export default async function handler(req, res) {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('API Error Response:', errorText);
+      console.error('API Error Response:', {
+        status: response.status,
+        statusText: response.statusText,
+        body: errorText,
+        headers: Object.fromEntries(response.headers.entries())
+      });
+      
+      if (response.status === 402) {
+        return res.status(402).json({
+          error: 'API subscription required',
+          message: 'The API key requires a paid subscription or has exceeded its quota.',
+          details: errorText
+        });
+      }
+      
       return res.status(response.status).json({
         error: `API request failed with status ${response.status}`,
+        message: response.statusText,
         details: errorText
       });
     }
 
     const data = await response.json();
+    console.log('API Success Response:', {
+      url: url,
+      params: params,
+      response: data
+    });
+
+    // Validate toll data
+    if (data && typeof data.total_toll_price === 'undefined') {
+      console.error('Invalid toll data received:', data);
+      return res.status(400).json({
+        error: 'Invalid toll data',
+        message: 'The API response did not contain expected toll information',
+        details: data
+      });
+    }
+
     return res.status(200).json(data);
   } catch (error) {
-    console.error('Proxy Error:', error);
+    console.error('Proxy Error:', {
+      error: error.message,
+      stack: error.stack,
+      params: params
+    });
     return res.status(500).json({
       error: 'Internal server error',
       message: error.message,
